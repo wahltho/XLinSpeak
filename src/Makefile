@@ -2,10 +2,18 @@
 
 all : lin.xpl
 
+CFLAGS ?= -g -Wall -Wextra -fvisibility=hidden -fPIC
+LDFLAGS ?= -pthread
+LIBS ?=
+
+ifdef USE_SPEECHD
+  CFLAGS += -DUSE_SPEECHD
+  LIBS += -lspeechd
+endif
+
 lin.xpl : xpl.c hook.c hook.h sec.c sec.h len64.c len.h utils.c utils.h hook_asm64.o
-	gcc -g -shared -fvisibility=hidden -fPIC -o $@ \
-	    -Wall -Wextra \
-            -I SDK/CHeaders/XPLM $^ -lspeechd
+	gcc $(CFLAGS) -shared -o $@ \
+            -I SDK/CHeaders/XPLM $^ $(LDFLAGS) $(LIBS)
 
 hook_asm64.o : hook_asm64.asm
 	nasm -f elf64 -o $@ $^
@@ -29,4 +37,3 @@ len64 : len64.c
 
 clean :
 	rm -f *.o lin*.xpl asm*.addr asm*.bin asm*.ref dis*.addr dis*.ref len64
-

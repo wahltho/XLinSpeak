@@ -71,7 +71,7 @@ PLUGIN_API int XPluginStart(
 
 PLUGIN_API void	XPluginStop(void)
 {
-  //speech_close();
+  speech_close();
 }
 
 PLUGIN_API int XPluginEnable(void)
@@ -90,4 +90,3 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFrom, int inMsg, void * inP
   (void) inMsg;
   (void) inParam;
 }
-
