@@ -20,6 +20,13 @@ Requires Docker Desktop and builds an x86_64 Linux plugin:
 ./build-lin-docker
 ```
 
+## Release ZIP
+Package the plugin folder structure for distribution:
+```bash
+./release.sh
+```
+Output: `dist/XLinSpeak-linux.zip`
+
 Manual one-shot equivalent:
 ```bash
 docker run --rm --platform=linux/amd64 \
