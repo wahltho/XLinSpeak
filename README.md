@@ -12,6 +12,8 @@ cd src
 
 make
 
+See `BUILD.md` for full build options and Docker instructions.
+
 ## Linux build via Docker (recommended on macOS)
 Requires Docker Desktop and builds an x86_64 Linux plugin:
 ```bash
@@ -39,6 +41,34 @@ Notes:
 * `PIPER_ARGS` and `PIPER_SINK` are split on spaces (no shell quoting).
 * Output is piped from Piper to the sink, so `PIPER_ARGS` must emit audio to stdout.
 
+Example Piper configs:
+```bash
+export PIPER_MODEL="$HOME/piper/voices/en_US-voice.onnx"
+export PIPER_ARGS="--output_file -"
+export PIPER_SINK="aplay -q"
+```
+```bash
+export PIPER_MODEL="/opt/piper/de_DE-voice.onnx"
+export PIPER_ARGS="--output_file -"
+export PIPER_SINK="paplay"
+```
+```bash
+export PIPER_MODEL="/opt/piper/en_GB-voice.onnx"
+export PIPER_ARGS="--output_file -"
+export PIPER_SINK="pw-play"
+```
+
 ## Optional speech-dispatcher fallback
 If you want the old speech-dispatcher backend as a fallback, build with:
 `USE_SPEECHD=1 make`
+
+## Troubleshooting (Piper)
+* No audio: verify `PIPER_MODEL` points to a valid `.onnx` model file.
+* "No TTS backend available" in X-Plane log: set `PIPER_MODEL` or build with `USE_SPEECHD=1` and install `libspeechd-dev`.
+* `piper: not found`: set `PIPER_BIN` to the full path of the Piper binary.
+* Audio errors from sink: try a different `PIPER_SINK` (`aplay -q`, `paplay`, or `pw-play`).
+
+Quick CLI sanity check (run on Linux):
+```bash
+echo "test" | piper --model /path/to/voice.onnx --output_file - | aplay -q
+```
