@@ -43,6 +43,13 @@ On Ubuntu:
 sudo apt-get install -y libspeechd-dev
 ```
 
+## Release ZIP
+Package the plugin folder structure for distribution:
+```bash
+./release.sh
+```
+Output: `dist/XLinSpeak-linux.zip`
+
 ## Clean
 ```bash
 cd src
