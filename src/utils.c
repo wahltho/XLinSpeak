@@ -9,6 +9,9 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <stdio.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <spawn.h>
 
 #include "utils.h"
 
@@ -21,6 +24,8 @@
 #ifdef USE_SPEECHD
 #include <speech-dispatcher/libspeechd.h>
 #endif
+
+extern char **environ;
 
 #define TTS_QUEUE_CAP 64
 #define TTS_MAX_TEXT 4096
@@ -336,12 +341,58 @@ static void write_all(int fd, const char *buf, size_t len)
   }
 }
 
+static int set_cloexec(int fd)
+{
+  int flags = fcntl(fd, F_GETFD);
+  if(flags < 0){
+    return -1;
+  }
+  return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+}
+
+static bool spawn_process(char *const argv[], int stdin_fd, int stdout_fd,
+                          const int *close_fds, size_t close_count,
+                          pid_t *pid_out)
+{
+  posix_spawn_file_actions_t actions;
+  size_t i;
+  int res;
+
+  if(argv == NULL || argv[0] == NULL){
+    return false;
+  }
+
+  if(posix_spawn_file_actions_init(&actions) != 0){
+    return false;
+  }
+
+  if(stdin_fd >= 0){
+    posix_spawn_file_actions_adddup2(&actions, stdin_fd, STDIN_FILENO);
+  }
+  if(stdout_fd >= 0){
+    posix_spawn_file_actions_adddup2(&actions, stdout_fd, STDOUT_FILENO);
+  }
+  for(i = 0; i < close_count; ++i){
+    posix_spawn_file_actions_addclose(&actions, close_fds[i]);
+  }
+
+  res = posix_spawnp(pid_out, argv[0], &actions, NULL, argv, environ);
+  posix_spawn_file_actions_destroy(&actions);
+
+  if(res != 0){
+    errno = res;
+    return false;
+  }
+  return true;
+}
+
 static void speak_piper(const char *text)
 {
   int inpipe[2];
   int outpipe[2];
   pid_t piper_pid;
   pid_t sink_pid;
+  int close_all[4];
 
   if(text == NULL || *text == '\0'){
     return;
@@ -358,20 +409,18 @@ static void speak_piper(const char *text)
     return;
   }
 
-  piper_pid = fork();
-  if(piper_pid == 0){
-    dup2(inpipe[0], STDIN_FILENO);
-    dup2(outpipe[1], STDOUT_FILENO);
-    close(inpipe[0]);
-    close(inpipe[1]);
-    close(outpipe[0]);
-    close(outpipe[1]);
-    execvp(piper_cmd.argv[0], piper_cmd.argv);
-    _exit(127);
-  }
+  set_cloexec(inpipe[0]);
+  set_cloexec(inpipe[1]);
+  set_cloexec(outpipe[0]);
+  set_cloexec(outpipe[1]);
 
-  if(piper_pid < 0){
-    xcDebug("XLinSpeak: Piper fork failed: %d\n", errno);
+  close_all[0] = inpipe[0];
+  close_all[1] = inpipe[1];
+  close_all[2] = outpipe[0];
+  close_all[3] = outpipe[1];
+
+  if(!spawn_process(piper_cmd.argv, inpipe[0], outpipe[1], close_all, 4, &piper_pid)){
+    xcDebug("XLinSpeak: Piper spawn failed: %d\n", errno);
     close(inpipe[0]);
     close(inpipe[1]);
     close(outpipe[0]);
@@ -379,19 +428,10 @@ static void speak_piper(const char *text)
     return;
   }
 
-  sink_pid = fork();
-  if(sink_pid == 0){
-    dup2(outpipe[0], STDIN_FILENO);
-    close(inpipe[0]);
-    close(inpipe[1]);
-    close(outpipe[0]);
-    close(outpipe[1]);
-    execvp(sink_cmd.argv[0], sink_cmd.argv);
-    _exit(127);
-  }
-
-  if(sink_pid < 0){
-    xcDebug("XLinSpeak: Sink fork failed: %d\n", errno);
+  if(!spawn_process(sink_cmd.argv, outpipe[0], -1, close_all, 4, &sink_pid)){
+    xcDebug("XLinSpeak: Sink spawn failed: %d\n", errno);
+    kill(piper_pid, SIGTERM);
+    waitpid(piper_pid, NULL, 0);
     close(inpipe[0]);
     close(inpipe[1]);
     close(outpipe[0]);
