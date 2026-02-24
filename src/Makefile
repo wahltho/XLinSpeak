@@ -3,7 +3,7 @@
 all : lin.xpl
 
 CFLAGS ?= -g -Wall -Wextra -fvisibility=hidden -fPIC
-LDFLAGS ?= -pthread
+LDFLAGS ?= -pthread -Wl,-rpath,'$$ORIGIN' -Wl,-rpath,'$$ORIGIN/../liblinux' -Wl,--enable-new-dtags
 LIBS ?=
 
 ifdef USE_SPEECHD
