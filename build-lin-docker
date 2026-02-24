@@ -3,10 +3,18 @@ set -euo pipefail
 
 # Linux build via Docker (x86_64)
 # Output: XLinSpeak/lin_x64/XLinSpeak.xpl
+# Optional: USE_PULSE=1 ./build-lin-docker
+
+PULSE_PKGS=""
+PULSE_MAKE=""
+if [ "${USE_PULSE:-0}" = "1" ]; then
+  PULSE_PKGS="libpulse-dev"
+  PULSE_MAKE="USE_PULSE=1"
+fi
 
 docker run --rm --platform=linux/amd64 \
   -v "$(pwd)":/workspace -w /workspace ubuntu:22.04 bash -lc "\
-  apt-get update && apt-get install -y build-essential nasm && \
-  cd src && make && \
+  apt-get update && apt-get install -y build-essential nasm ${PULSE_PKGS} && \
+  cd src && make ${PULSE_MAKE} && \
   cp -f lin.xpl ../XLinSpeak/lin_x64/XLinSpeak.xpl && \
   make clean"

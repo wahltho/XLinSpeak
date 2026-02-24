@@ -11,6 +11,11 @@ ifdef USE_SPEECHD
   LIBS += -lspeechd
 endif
 
+ifdef USE_PULSE
+  CFLAGS += -DUSE_PULSE
+  LIBS += -lpulse-simple -lpulse
+endif
+
 lin.xpl : xpl.c hook.c hook.h sec.c sec.h len64.c len.h utils.c utils.h hook_asm64.o
 	gcc $(CFLAGS) -shared -o $@ \
             -I SDK/CHeaders/XPLM $^ $(LDFLAGS) $(LIBS)

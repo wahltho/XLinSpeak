@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
+#include <strings.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -23,6 +24,11 @@
 
 #ifdef USE_SPEECHD
 #include <speech-dispatcher/libspeechd.h>
+#endif
+#ifdef USE_PULSE
+#include <pulse/simple.h>
+#include <pulse/error.h>
+#include <pulse/sample.h>
 #endif
 
 extern char **environ;
@@ -59,6 +65,12 @@ static enum tts_backend backend = TTS_NONE;
 
 static struct tts_cmd piper_cmd;
 static struct tts_cmd sink_cmd;
+
+#ifdef USE_PULSE
+static bool pulse_enabled = false;
+static pa_simple *pulse_stream = NULL;
+static pa_sample_spec pulse_spec;
+#endif
 
 #ifdef USE_SPEECHD
 static SPDConnection *conn = NULL;
@@ -192,6 +204,21 @@ static bool argv_add_split(struct tts_cmd *cmd, const char *args)
     }
   }
   return true;
+}
+
+static bool env_is_true(const char *name)
+{
+  const char *val = getenv(name);
+  if(val == NULL){
+    return false;
+  }
+  if((strcasecmp(val, "1") == 0) ||
+     (strcasecmp(val, "true") == 0) ||
+     (strcasecmp(val, "yes") == 0) ||
+     (strcasecmp(val, "on") == 0)){
+    return true;
+  }
+  return false;
 }
 
 static bool build_piper_cmd(void)
@@ -341,6 +368,168 @@ static void write_all(int fd, const char *buf, size_t len)
   }
 }
 
+static bool read_exact(int fd, void *buf, size_t len)
+{
+  size_t off = 0;
+  while(off < len){
+    ssize_t res = read(fd, (uint8_t *)buf + off, len - off);
+    if(res < 0){
+      if(errno == EINTR){
+        continue;
+      }
+      return false;
+    }
+    if(res == 0){
+      return false;
+    }
+    off += (size_t)res;
+  }
+  return true;
+}
+
+static bool skip_bytes(int fd, size_t len)
+{
+  uint8_t tmp[512];
+  while(len > 0){
+    size_t chunk = len > sizeof(tmp) ? sizeof(tmp) : len;
+    if(!read_exact(fd, tmp, chunk)){
+      return false;
+    }
+    len -= chunk;
+  }
+  return true;
+}
+
+static uint16_t le16(const uint8_t *p)
+{
+  return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+static uint32_t le32(const uint8_t *p)
+{
+  return (uint32_t)p[0] |
+         ((uint32_t)p[1] << 8) |
+         ((uint32_t)p[2] << 16) |
+         ((uint32_t)p[3] << 24);
+}
+
+struct wav_info {
+  uint16_t format;
+  uint16_t channels;
+  uint32_t sample_rate;
+  uint16_t bits_per_sample;
+};
+
+static bool wav_read_header(int fd, struct wav_info *info)
+{
+  uint8_t hdr[12];
+  bool got_fmt = false;
+  bool got_data = false;
+
+  if(!read_exact(fd, hdr, sizeof(hdr))){
+    return false;
+  }
+  if(memcmp(hdr, "RIFF", 4) != 0 || memcmp(hdr + 8, "WAVE", 4) != 0){
+    return false;
+  }
+
+  while(!got_data){
+    uint8_t chunk[8];
+    uint32_t size;
+    if(!read_exact(fd, chunk, sizeof(chunk))){
+      return false;
+    }
+    size = le32(chunk + 4);
+
+    if(memcmp(chunk, "fmt ", 4) == 0){
+      uint8_t fmt[16];
+      if(size < 16){
+        return false;
+      }
+      if(!read_exact(fd, fmt, 16)){
+        return false;
+      }
+      info->format = le16(fmt + 0);
+      info->channels = le16(fmt + 2);
+      info->sample_rate = le32(fmt + 4);
+      info->bits_per_sample = le16(fmt + 14);
+      got_fmt = true;
+      if(size > 16){
+        if(!skip_bytes(fd, size - 16)){
+          return false;
+        }
+      }
+      if(size & 1){
+        if(!skip_bytes(fd, 1)){
+          return false;
+        }
+      }
+    }else if(memcmp(chunk, "data", 4) == 0){
+      got_data = true;
+    }else{
+      if(!skip_bytes(fd, size)){
+        return false;
+      }
+      if(size & 1){
+        if(!skip_bytes(fd, 1)){
+          return false;
+        }
+      }
+    }
+  }
+
+  return got_fmt;
+}
+
+#ifdef USE_PULSE
+static bool pulse_open(const struct wav_info *info)
+{
+  int err;
+  pa_sample_spec spec;
+
+  if(info->format != 1){
+    xcDebug("XLinSpeak: Pulse only supports PCM WAV from Piper.\n");
+    return false;
+  }
+  if(info->bits_per_sample != 16){
+    xcDebug("XLinSpeak: Pulse only supports 16-bit PCM from Piper.\n");
+    return false;
+  }
+  if(info->channels == 0 || info->sample_rate == 0){
+    xcDebug("XLinSpeak: Invalid WAV header from Piper.\n");
+    return false;
+  }
+
+  spec.format = PA_SAMPLE_S16LE;
+  spec.rate = info->sample_rate;
+  spec.channels = (uint8_t)info->channels;
+
+  if(!pa_sample_spec_valid(&spec)){
+    xcDebug("XLinSpeak: Invalid Pulse sample spec.\n");
+    return false;
+  }
+
+  if(pulse_stream != NULL){
+    if(pulse_spec.rate == spec.rate &&
+       pulse_spec.channels == spec.channels &&
+       pulse_spec.format == spec.format){
+      return true;
+    }
+    pa_simple_free(pulse_stream);
+    pulse_stream = NULL;
+  }
+
+  pulse_stream = pa_simple_new(NULL, "XLinSpeak", PA_STREAM_PLAYBACK, NULL,
+                               "Piper", &spec, NULL, NULL, &err);
+  if(pulse_stream == NULL){
+    xcDebug("XLinSpeak: Pulse open failed: %s\n", pa_strerror(err));
+    return false;
+  }
+  pulse_spec = spec;
+  return true;
+}
+#endif
+
 static int set_cloexec(int fd)
 {
   int flags = fcntl(fd, F_GETFD);
@@ -428,25 +617,50 @@ static void speak_piper(const char *text)
     return;
   }
 
-  if(!spawn_process(sink_cmd.argv, outpipe[0], -1, close_all, 4, &sink_pid)){
-    xcDebug("XLinSpeak: Sink spawn failed: %d\n", errno);
-    kill(piper_pid, SIGTERM);
-    waitpid(piper_pid, NULL, 0);
-    close(inpipe[0]);
-    close(inpipe[1]);
-    close(outpipe[0]);
-    close(outpipe[1]);
-    return;
-  }
-
   close(inpipe[0]);
-  close(outpipe[0]);
   close(outpipe[1]);
 
   write_all(inpipe[1], text, strlen(text));
   write_all(inpipe[1], "\n", 1);
   close(inpipe[1]);
 
+#ifdef USE_PULSE
+  if(pulse_enabled){
+    struct wav_info info;
+    uint8_t buf[4096];
+    ssize_t r;
+    int err;
+    bool ok = wav_read_header(outpipe[0], &info);
+
+    if(ok && pulse_open(&info)){
+      while((r = read(outpipe[0], buf, sizeof(buf))) > 0){
+        if(pa_simple_write(pulse_stream, buf, (size_t)r, &err) < 0){
+          xcDebug("XLinSpeak: Pulse write failed: %s\n", pa_strerror(err));
+          break;
+        }
+      }
+      pa_simple_drain(pulse_stream, &err);
+    }else{
+      xcDebug("XLinSpeak: Piper WAV header invalid or Pulse unavailable.\n");
+      while(read(outpipe[0], buf, sizeof(buf)) > 0){
+        /* discard */
+      }
+    }
+    close(outpipe[0]);
+    waitpid(piper_pid, NULL, 0);
+    return;
+  }
+#endif
+
+  if(!spawn_process(sink_cmd.argv, outpipe[0], -1, close_all, 4, &sink_pid)){
+    xcDebug("XLinSpeak: Sink spawn failed: %d\n", errno);
+    kill(piper_pid, SIGTERM);
+    waitpid(piper_pid, NULL, 0);
+    close(outpipe[0]);
+    return;
+  }
+
+  close(outpipe[0]);
   waitpid(piper_pid, NULL, 0);
   waitpid(sink_pid, NULL, 0);
 }
@@ -518,6 +732,12 @@ bool speech_init(void)
 
   if(build_piper_cmd() && build_sink_cmd()){
     backend = TTS_PIPER;
+#ifdef USE_PULSE
+    pulse_enabled = env_is_true("PIPER_PULSE");
+    if(pulse_enabled){
+      xcDebug("XLinSpeak: Pulse backend enabled (PIPER_PULSE=1).\n");
+    }
+#endif
     xcDebug("XLinSpeak: Piper backend enabled.\n");
   }else{
     argv_free(&piper_cmd);
@@ -587,6 +807,15 @@ void speech_close(void)
     argv_free(&piper_cmd);
     argv_free(&sink_cmd);
   }
+
+#ifdef USE_PULSE
+  if(pulse_stream != NULL){
+    int err;
+    pa_simple_drain(pulse_stream, &err);
+    pa_simple_free(pulse_stream);
+    pulse_stream = NULL;
+  }
+#endif
 
 #ifdef USE_SPEECHD
   if(backend == TTS_SPEECHD){

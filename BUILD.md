@@ -4,6 +4,7 @@
 - Linux toolchain: `gcc`, `make`, `nasm`
 - Docker Desktop for macOS/Windows hosts (optional)
 - Optional fallback backend: `libspeechd-dev`
+- Optional PulseAudio backend: `libpulse-dev` (libpulse-simple)
 
 ## Artifacts
 - Build output: `src/lin.xpl`
@@ -41,6 +42,17 @@ USE_SPEECHD=1 make
 On Ubuntu:
 ```bash
 sudo apt-get install -y libspeechd-dev
+```
+
+## Optional PulseAudio backend (persistent stream)
+Build with:
+```bash
+USE_PULSE=1 make
+```
+
+On Ubuntu:
+```bash
+sudo apt-get install -y libpulse-dev
 ```
 
 ## Release ZIP

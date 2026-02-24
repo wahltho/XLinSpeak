@@ -13,6 +13,7 @@ The plugin uses Piper CLI with a background queue. Configure via environment:
 * `PIPER_MODEL` (path to Piper voice model)
 * `PIPER_ARGS` (default: `--output_file -`)
 * `PIPER_SINK` (default: `aplay -q`)
+* `PIPER_PULSE` (set to `1` to use a persistent PulseAudio stream; requires Pulse support in the build)
 
 Notes:
 * `PIPER_ARGS` and `PIPER_SINK` are split on spaces (no shell quoting).
