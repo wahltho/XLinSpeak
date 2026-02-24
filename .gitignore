@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exe
+*.xpl
+*.bin
+*.ref
+*.addr
+
+# Build/output dirs
+build-*/
+build/
+dist/
+
+# Temp/working
+.tmp/
+tmp/
+tmp_feedback/
+
+# Logs
+*.log
+
