@@ -4,6 +4,7 @@ set -euo pipefail
 # Linux build via Docker (x86_64)
 # Output: XLinSpeak/lin_x64/XLinSpeak.xpl
 # Optional: USE_PULSE=1 ./build-lin-docker
+# Optional fallback: USE_SPEECHD=1 ./build-lin-docker
 
 PULSE_PKGS=""
 PULSE_MAKE=""
@@ -12,9 +13,16 @@ if [ "${USE_PULSE:-0}" = "1" ]; then
   PULSE_MAKE="USE_PULSE=1"
 fi
 
+SPEECHD_PKGS=""
+SPEECHD_MAKE=""
+if [ "${USE_SPEECHD:-0}" = "1" ]; then
+  SPEECHD_PKGS="libspeechd-dev"
+  SPEECHD_MAKE="USE_SPEECHD=1"
+fi
+
 docker run --rm --platform=linux/amd64 \
   -v "$(pwd)":/workspace -w /workspace ubuntu:22.04 bash -lc "\
-  apt-get update && apt-get install -y build-essential nasm ${PULSE_PKGS} && \
-  cd src && make ${PULSE_MAKE} && \
+  apt-get update && apt-get install -y build-essential nasm ${PULSE_PKGS} ${SPEECHD_PKGS} && \
+  cd src && make ${PULSE_MAKE} ${SPEECHD_MAKE} && \
   cp -f lin.xpl ../XLinSpeak/lin_x64/XLinSpeak.xpl && \
   make clean"

@@ -38,9 +38,11 @@ export PIPER_SINK="pw-play"
 
 ## Troubleshooting (Piper)
 * No audio: verify `PIPER_MODEL` points to a valid `.onnx` model file.
- * "No TTS backend available" in X-Plane log: set `PIPER_MODEL` and verify `PIPER_BIN` points to a working Piper binary.
+* "No TTS backend available" in X-Plane log: set `PIPER_MODEL` and verify `PIPER_BIN` points to a working Piper binary.
+* `Piper spawn failed: 2 (No such file or directory)`: X-Plane cannot execute `PIPER_BIN`. Use an absolute path and make sure X-Plane was launched from an environment that contains your exports. Desktop/Steam launchers often do not inherit variables exported in a terminal.
 * `piper: not found`: set `PIPER_BIN` to the full path of the Piper binary.
 * Audio errors from sink: try a different `PIPER_SINK` (`aplay -q`, `paplay`, or `pw-play`).
+* eSpeak fallback is provided through speech-dispatcher only when the plugin was built with `USE_SPEECHD=1`.
 
 Quick CLI sanity check (run on Linux):
 ```bash

@@ -74,6 +74,12 @@ static pa_sample_spec pulse_spec;
 
 #ifdef USE_SPEECHD
 static SPDConnection *conn = NULL;
+static bool speechd_unavailable = false;
+
+static bool speechd_init(void);
+static void speechd_say(const char *str);
+static void speechd_close(void);
+static void speechd_fallback_say(const char *str, const char *reason);
 #endif
 
 static char *msg = NULL;
@@ -248,7 +254,7 @@ static bool build_piper_cmd(void)
       return false;
     }
   }else{
-    xcDebug("XLinSpeak: PIPER_MODEL not set, relying on PIPER_ARGS.\\n");
+    xcDebug("XLinSpeak: PIPER_MODEL not set, relying on PIPER_ARGS.\n");
   }
   return true;
 }
@@ -609,11 +615,16 @@ static void speak_piper(const char *text)
   close_all[3] = outpipe[1];
 
   if(!spawn_process(piper_cmd.argv, inpipe[0], outpipe[1], close_all, 4, &piper_pid)){
-    xcDebug("XLinSpeak: Piper spawn failed: %d\n", errno);
+    int spawn_errno = errno;
+    xcDebug("XLinSpeak: Piper spawn failed: %d (%s): %s\n",
+            spawn_errno, strerror(spawn_errno), piper_cmd.argv[0]);
     close(inpipe[0]);
     close(inpipe[1]);
     close(outpipe[0]);
     close(outpipe[1]);
+#ifdef USE_SPEECHD
+    speechd_fallback_say(text, "Piper spawn failed");
+#endif
     return;
   }
 
@@ -653,10 +664,15 @@ static void speak_piper(const char *text)
 #endif
 
   if(!spawn_process(sink_cmd.argv, outpipe[0], -1, close_all, 4, &sink_pid)){
-    xcDebug("XLinSpeak: Sink spawn failed: %d\n", errno);
+    int spawn_errno = errno;
+    xcDebug("XLinSpeak: Sink spawn failed: %d (%s): %s\n",
+            spawn_errno, strerror(spawn_errno), sink_cmd.argv[0]);
     kill(piper_pid, SIGTERM);
     waitpid(piper_pid, NULL, 0);
     close(outpipe[0]);
+#ifdef USE_SPEECHD
+    speechd_fallback_say(text, "sink spawn failed");
+#endif
     return;
   }
 
@@ -689,6 +705,20 @@ static void speechd_close(void)
     spd_close(conn);
     conn = NULL;
   }
+  speechd_unavailable = false;
+}
+
+static void speechd_fallback_say(const char *str, const char *reason)
+{
+  if(str == NULL || *str == '\0' || speechd_unavailable){
+    return;
+  }
+  if(conn == NULL && !speechd_init()){
+    speechd_unavailable = true;
+    return;
+  }
+  xcDebug("XLinSpeak: Falling back to speech-dispatcher after %s.\n", reason);
+  speechd_say(str);
 }
 #endif
 
@@ -729,6 +759,9 @@ bool speech_init(void)
   }
 
   queue_init(&queue_state);
+#ifdef USE_SPEECHD
+  speechd_unavailable = false;
+#endif
 
   if(build_piper_cmd() && build_sink_cmd()){
     backend = TTS_PIPER;
@@ -818,7 +851,7 @@ void speech_close(void)
 #endif
 
 #ifdef USE_SPEECHD
-  if(backend == TTS_SPEECHD){
+  if(conn != NULL){
     speechd_close();
   }
 #endif

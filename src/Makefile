@@ -5,6 +5,8 @@ all : lin.xpl
 CFLAGS ?= -g -Wall -Wextra -fvisibility=hidden -fPIC
 LDFLAGS ?= -pthread -Wl,-rpath,'$$ORIGIN' -Wl,-rpath,'$$ORIGIN/../liblinux' -Wl,--enable-new-dtags
 LIBS ?=
+LIN_XPL_SRCS = xpl.c hook.c sec.c len64.c utils.c hook_asm64.o
+LIN_XPL_DEPS = $(LIN_XPL_SRCS) hook.h sec.h len.h utils.h version.h
 
 ifdef USE_SPEECHD
   CFLAGS += -DUSE_SPEECHD
@@ -16,9 +18,9 @@ ifdef USE_PULSE
   LIBS += -lpulse-simple -lpulse
 endif
 
-lin.xpl : xpl.c hook.c hook.h sec.c sec.h len64.c len.h utils.c utils.h hook_asm64.o
+lin.xpl : $(LIN_XPL_DEPS)
 	gcc $(CFLAGS) -shared -o $@ \
-            -I SDK/CHeaders/XPLM $^ $(LDFLAGS) $(LIBS)
+            -I SDK/CHeaders/XPLM $(LIN_XPL_SRCS) $(LDFLAGS) $(LIBS)
 
 hook_asm64.o : hook_asm64.asm
 	nasm -f elf64 -o $@ $^

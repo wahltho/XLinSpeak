@@ -22,6 +22,14 @@ Use the helper script:
 ```bash
 ./build-lin-docker
 ```
+Optional speech-dispatcher fallback:
+```bash
+USE_SPEECHD=1 ./build-lin-docker
+```
+Optional PulseAudio backend:
+```bash
+USE_PULSE=1 ./build-lin-docker
+```
 
 Manual one-shot equivalent:
 ```bash
@@ -61,6 +69,9 @@ Package the plugin folder structure for distribution:
 ./release.sh
 ```
 Output: `dist/XLinSpeak-linux.zip`
+
+## Versioning
+The plugin version is defined in `src/version.h`. Use a `-dev` suffix for unreleased builds and remove it for release artifacts.
 
 ## Clean
 ```bash

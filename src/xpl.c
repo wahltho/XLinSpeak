@@ -10,6 +10,7 @@
 #include <XPLMUtilities.h>
 #include "hook.h"
 #include "sec.h"
+#include "version.h"
 
 struct function_ptrs ptrs[] = {
   {.name = "_ZN10spch_class22SPEECH_synth_non_radioENSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE11speech_typei", .address = 0, .hook = 1},
@@ -24,11 +25,11 @@ PLUGIN_API int XPluginStart(
 						char *		outSig,
 						char *		outDesc)
 {
-  strcpy(outName, "XLinSpeak");
-  strcpy(outSig, "XLinSpeak v04");
-  strcpy(outDesc, "Speak up now");
+  strcpy(outName, XLINSPEAK_PLUGIN_NAME);
+  strcpy(outSig, XLINSPEAK_PLUGIN_SIGNATURE);
+  strcpy(outDesc, XLINSPEAK_PLUGIN_DESCRIPTION);
 
-  xcDebug("XLinSpeak going to init tables...\n");
+  xcDebug("XLinSpeak version %s going to init tables...\n", XLINSPEAK_VERSION);
   if(!locate_tables()){
     xcDebug("Couldn't init tables!\n");
     return 1;
