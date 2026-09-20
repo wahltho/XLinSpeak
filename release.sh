@@ -1,20 +1,26 @@
 #!/bin/bash
 set -euo pipefail
 
-# Create release zip with X-Plane plugin folder structure
-# Output: dist/XLinSpeak-linux.zip
-
+# Package the existing binary and create its MTK release manifest. No binary build.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-STAGE_DIR="$DIST_DIR/XLinSpeak"
-ZIP_PATH="$DIST_DIR/XLinSpeak-linux.zip"
-
-rm -rf "$DIST_DIR"
-mkdir -p "$STAGE_DIR/lin_x64"
-
-cp -f "$ROOT_DIR/XLinSpeak/lin_x64/XLinSpeak.xpl" "$STAGE_DIR/lin_x64/XLinSpeak.xpl"
-cp -f "$ROOT_DIR/README.md" "$STAGE_DIR/README.md"
-
-(cd "$DIST_DIR" && zip -r "$(basename "$ZIP_PATH")" "$(basename "$STAGE_DIR")")
-
-echo "Created: $ZIP_PATH"
+VERSION="$(python3 - "$ROOT_DIR/src/version.h" <<'PY'
+import re, sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text()
+print('.'.join(re.search(r'#define XLINSPEAK_VERSION_' + part + r'\s+(\d+)', source).group(1)
+               for part in ['MAJOR', 'MINOR', 'PATCH']))
+PY
+)"
+mkdir -p "$DIST_DIR"
+STAGE_DIR="$(mktemp -d "$DIST_DIR/package.XXXXXX")"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+ZIP_NAME="XLinSpeak-linux.$VERSION.zip"
+mkdir -p "$STAGE_DIR/XLinSpeak/lin_x64"
+cp "$ROOT_DIR/XLinSpeak/lin_x64/XLinSpeak.xpl" "$STAGE_DIR/XLinSpeak/lin_x64/XLinSpeak.xpl"
+cp "$ROOT_DIR/README.md" "$STAGE_DIR/XLinSpeak/README.md"
+(cd "$STAGE_DIR" && zip -qr "$ZIP_NAME" XLinSpeak)
+python3 "$ROOT_DIR/tools/create_mtk_manifest.py" "$STAGE_DIR/$ZIP_NAME" --version "$VERSION"
+mv "$STAGE_DIR/$ZIP_NAME" "$DIST_DIR/$ZIP_NAME"
+mv "$STAGE_DIR/XLinSpeak-$VERSION-manifest.json" "$DIST_DIR/XLinSpeak-$VERSION-manifest.json"
+echo "Created archive and MTK manifest in $DIST_DIR"
