@@ -36,7 +36,7 @@ Manual one-shot equivalent:
 docker run --rm --platform=linux/amd64 \
   -v "$(pwd)":/workspace -w /workspace ubuntu:22.04 bash -lc "\
   apt-get update && apt-get install -y build-essential nasm && \
-  cd src && make && \
+  cd src && make test && make && \
   cp -f lin.xpl ../XLinSpeak/lin_x64/XLinSpeak.xpl && \
   make clean"
 ```

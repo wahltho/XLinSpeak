@@ -22,6 +22,8 @@ Desktop.ini
 *.bin
 *.ref
 *.addr
+*.dSYM/
+/src/len64-test
 
 # Build/output dirs
 build-*/
@@ -35,4 +37,3 @@ tmp_feedback/
 
 # Logs
 *.log
-

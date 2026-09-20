@@ -34,6 +34,10 @@ typedef struct{
 t_modrm_variants no_modrm[] = {{0x00, 0x00, {0, 0}, {0, 0}}};
 t_modrm_variants modrm[] = {{0x00, 0x00, {0, 0}, {0, 0}}};
 t_modrm_variants modrm_byte[] = {{0x00, 0x00, {1, 1}, {0, 0}}};
+t_modrm_variants group3_byte[] = {
+  {0x38, 0x00, {1, 1}, {0, 0}},
+  {0x00, 0x00, {0, 0}, {0, 0}}
+};
 t_modrm_variants no_modrm_imm8[] = {{0x00, 0x00, {1, 1}, {0, 0}}};
 t_modrm_variants no_modrm_imm16_32[] = {{0x00, 0x00, {4, 2}, {0, 0}}};
 
@@ -314,7 +318,7 @@ t_instr_info byte1[256] = {
   {WRONG, true, false, no_modrm}, //0xF3
   {WRONG, true, false, no_modrm}, //0xF4
   {WRONG, true, false, no_modrm}, //0xF5
-  {WRONG, true, false, no_modrm}, //0xF6
+  {0x00, true, true, group3_byte}, //0xF6
   {WRONG, true, false, no_modrm}, //0xF7
   {WRONG, true, false, no_modrm}, //0xF8
   {WRONG, true, false, no_modrm}, //0xF9
@@ -464,4 +468,3 @@ int main(int argc, char *argv[])
 }
 
 #endif
-
